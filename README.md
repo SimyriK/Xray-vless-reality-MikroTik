@@ -12,8 +12,28 @@
 - 🔄 **Автоматическое обновление подписки** — периодическое обновление через cron
 - 🌐 **Поддержка xhttp транспорта** — в дополнение к tcp
 - 🤖 **Автоматическое определение сетевых параметров** — не требуется ручная настройка IP бриджа и интерфейсов
+- 🚀 **Интерактивный скрипт установки** — автоматическая настройка контейнера через пошаговый мастер
 
 :dizzy: Аналог [AmneziaWG + MikroTik](https://github.com/catesin/AmneziaWG-MikroTik)
+
+---
+
+## 🚀 Быстрая установка (одна команда)
+
+Выполните в терминале MikroTik:
+
+```
+/tool/fetch url="https://raw.githubusercontent.com/SimyriK/Xray-vless-reality-MikroTik/main/xray-container-setup.rsc" dst-path="xray-setup.rsc"; /import file-name="xray-setup.rsc"
+```
+
+Или если предпочитаете сохранить как скрипт для повторного использования:
+
+```
+/system/script/add name=xray-setup source=([/tool/fetch url="https://raw.githubusercontent.com/SimyriK/Xray-vless-reality-MikroTik/main/xray-container-setup.rsc" output=user as-value]->"data")
+/system/script/run xray-setup
+```
+
+> ⚠️ **Требования:** RouterOS 7.4+ с включенным режимом контейнеров, доступ в интернет
 
 ---
 
