@@ -400,5 +400,3 @@ add chain=input in-interface=docker-xray-vless-veth src-address=172.18.20.6 dst-
 :fire::fire::fire: Поздравляю! Настройка завершена. Можно проверить доступность IP 172.217.168.206 из списка "to_vpn" (этот адрес мы добавили ранее). Проверям доступность через запрос на https порт (запрос в браузере, telnet или TNC PowerShell)
  
 По желанию логирование контейнера можно отключить что бы не засорялся лог RouteOS.
-
-[Donate :sparkling_heart:](https://telegra.ph/Youre-making-the-world-a-better-place-01-14)
