@@ -24,7 +24,7 @@ PUBLIC_KEY_PBK=$(echo "$FULL_STRING" | sed "s/^.*pbk=//g" | sed "s/&.*$//g")
 if echo "$PUBLIC_KEY_PBK" | grep -q "^vless://"; then
   PUBLIC_KEY_PBK=""
 fi
-SHORT_ID_SID=$(echo "$FULL_STRING" | sed "s/^.*sid=//g" | sed "s/&.*$//g")
+SHORT_ID_SID=$(echo "$FULL_STRING" | sed "s/^.*sid=//g" | sed "s/&.*$//g" | sed "s/#.*$//g")
 # Если sid не найден (параметр отсутствует в строке), очищаем
 if echo "$SHORT_ID_SID" | grep -q "^vless://"; then
   SHORT_ID_SID=""
