@@ -5,7 +5,17 @@
 
 SUBSCRIPTION_URL="$1"
 SUBSCRIPTION_INDEX="$2"
-CURRENT_FULL_STRING_FILE="/tmp/current_full_string.txt"
+CURRENT_FULL_STRING_FILE="${RUNTIME_DIR:-/tmp}/current_full_string.txt"
+LOG_MAX_KB="${SUBSCRIPTION_LOG_MAX_KB:-256}"
+
+rotate_log() {
+  logFile="$1"
+  maxBytes=$((LOG_MAX_KB * 1024))
+  if [ -f "${logFile}" ] && [ "$(wc -c < "${logFile}" | tr -d ' ')" -gt "${maxBytes}" ]; then
+    tail -n 100 "${logFile}" > "${logFile}.tmp"
+    mv "${logFile}.tmp" "${logFile}"
+  fi
+}
 
 if [ -z "$SUBSCRIPTION_URL" ]; then
   echo "Usage: update_subscription.sh <SUBSCRIPTION_URL> <SUBSCRIPTION_INDEX>"
@@ -15,6 +25,7 @@ fi
 SUBSCRIPTION_INDEX=${SUBSCRIPTION_INDEX:-1}
 
 echo "[$(date)] Checking subscription for updates..."
+rotate_log "${RUNTIME_DIR:-/tmp}/subscription_update.log"
 
 # Определяем IP бриджа для маршрута к серверу подписки (если еще не определен)
 if [ -z "$CONTAINER_BRIDGE_IP" ]; then
@@ -101,6 +112,8 @@ if [ -n "$SERVER_IP_ADDRESS" ] && [ -n "$CONTAINER_BRIDGE_IP" ]; then
 fi
 
 # Генерируем новый config.json
+NET_IFACE=$(ip -o link show | awk -F': ' '{print $2}' | grep -vE 'lo|tun' | head -n1 | cut -d'@' -f1)
+export SOCKS_LISTEN="${SOCKS_LISTEN:-127.0.0.1}"
 NETWORK=$(echo "$NEW_FULL_STRING" | sed "s/^.*type=//g" | sed "s/&.*$//g")
 if [ "$NETWORK" = "tcp" ]; then
   /bin/sh /opt/tcpraw.sh
@@ -117,18 +130,20 @@ pkill xray
 sleep 2
 
 # Запускаем Xray с новой конфигурацией
-/tmp/xray/xray run -config /opt/xray/config/config.json &
+/usr/local/bin/xray run -config /opt/xray/config/config.json &
 
 # Ждем пока Xray запустится
 echo "[$(date)] Waiting for Xray SOCKS port 10800..."
+socksPort="${XRAY_SOCKS_PORT:-10800}"
+socksListen="${SOCKS_LISTEN:-127.0.0.1}"
 for i in $(seq 1 10); do
-  if nc -z 127.0.0.1 10800 2>/dev/null; then
+  if nc -z "$socksListen" "$socksPort" 2>/dev/null; then
     echo "[$(date)] Xray restarted successfully"
     break
   fi
   sleep 1
 done
 
-if ! nc -z 127.0.0.1 10800 2>/dev/null; then
-  echo "[$(date)] Warning: Xray port 10800 is not responding after update"
+if ! nc -z "$socksListen" "$socksPort" 2>/dev/null; then
+  echo "[$(date)] Warning: Xray port ${socksPort} is not responding after update"
 fi

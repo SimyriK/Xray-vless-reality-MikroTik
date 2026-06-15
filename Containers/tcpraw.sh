@@ -40,6 +40,8 @@ if [ -z "$SPIDERX" ] || echo "$SPIDERX" | grep -q "^vless://"; then
   SPIDERX="/"
 fi
 
+SOCKS_LISTEN_ADDR="${SOCKS_LISTEN:-0.0.0.0}"
+
 echo "TCP(RAW) config:"
 echo "NETWORK: $NETWORK"
 echo "USER_ID: $USER_ID"
@@ -52,6 +54,7 @@ echo "PUBLIC_KEY_PBK: $PUBLIC_KEY_PBK"
 echo "SHORT_ID_SID: $SHORT_ID_SID"
 echo "FLOW: $FLOW"
 echo "SPIDERX: $SPIDERX"
+echo "SOCKS_LISTEN: $SOCKS_LISTEN_ADDR"
 
 cat <<EOF > /opt/xray/config/config.json
 {
@@ -60,14 +63,15 @@ cat <<EOF > /opt/xray/config/config.json
   },
   "inbounds": [
     {
+      "tag": "socks-in",
       "port": 10800,
-      "listen": "0.0.0.0",
+      "listen": "$SOCKS_LISTEN_ADDR",
       "protocol": "socks",
       "settings": {
         "udp": true
       },
       "sniffing": {
-        "enabled": false,
+        "enabled": true,
         "destOverride": ["http", "tls", "quic"],
         "routeOnly": true
       }

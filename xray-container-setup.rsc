@@ -41,126 +41,183 @@
 }
 
 # ============================================================
-# STEP 1: Check/Create RAM Disk for tmpfs
+# STEP 1: Select storage for container (root-dir)
 # ============================================================
 :put ""
-:put "=== Step 1: Checking RAM disk (tmpfs) ==="
+:put "=== Step 1: Storage for container (root-dir) ==="
 :put ""
-
-:local ramDiskExists
-:set ramDiskExists false
-:local ramDiskSlot
-:set ramDiskSlot ""
-
-:local disks
-:set disks [/disk/print as-value where type="tmpfs"]
-:if ([:len $disks] > 0) do={
-    :set ramDiskExists true
-    :set ramDiskSlot (($disks->0)->"slot")
-    :put "OK: RAM disk exists: $ramDiskSlot"
-} else={
-    :put "RAM disk (tmpfs) not found."
-    :put ""
-    :put "RAM disk is recommended for container tmp directory."
-    :put "Create RAM disk? (y/n):"
-    :local createRam
-    :set createRam [$inputFunc]
-    
-    :if ($createRam = "y" || $createRam = "Y" || $createRam = "yes") do={
-        :put ""
-        :put "Enter RAM disk size in MB [Enter = 100]:"
-        :local ramSize
-        :set ramSize [$inputFunc]
-        :if ([:len $ramSize] = 0) do={
-            :set ramSize "100"
-        }
-        
-        :put "Enter slot name [Enter = ramstorage]:"
-        :local slotName
-        :set slotName [$inputFunc]
-        :if ([:len $slotName] = 0) do={
-            :set slotName "ramstorage"
-        }
-        
-        # Check if slot name already exists
-        :local slotExists
-        :set slotExists [/disk/print as-value where slot=$slotName]
-        :if ([:len $slotExists] > 0) do={
-            :put "ERROR: Slot name '$slotName' already exists."
-        } else={
-            :local ramSizeMB
-            :set ramSizeMB ($ramSize . "M")
-            /disk/add slot=$slotName tmpfs-max-size=$ramSizeMB type=tmpfs
-            :put "Created RAM disk: $slotName ($ramSizeMB)"
-            :set ramDiskSlot $slotName
-        }
-    } else={
-        :put "Skipped RAM disk creation."
-    }
-}
-
-# ============================================================
-# STEP 2: Check USB storage and select installation location
-# ============================================================
-:put ""
-:put "=== Step 2: Checking storage location ==="
+:put "MikroTik recommends external storage (USB/SATA/SD) for containers."
+:put "Internal flash is only for small devices without a disk."
 :put ""
 
 :local installLocation
 :set installLocation ""
 
-# Get list of available disks (excluding tmpfs)
 :local availableDisks
 :set availableDisks [/disk/print as-value where type!="tmpfs"]
 
-:local usbDisks
-:set usbDisks [:toarray ""]
-:local usbCount
-:set usbCount 0
+:local diskSlots
+:set diskSlots [:toarray ""]
+:local diskCount
+:set diskCount 0
 
 :foreach disk in=$availableDisks do={
     :local diskSlot
     :set diskSlot ($disk->"slot")
-    :if ([:find $diskSlot "usb"] >= 0 || [:find $diskSlot "sd"] >= 0) do={
-        :set usbDisks ($usbDisks, $diskSlot)
-        :set usbCount ($usbCount + 1)
+    :if ([:len $diskSlot] > 0) do={
+        :set diskCount ($diskCount + 1)
+        :local diskLabel
+        :set diskLabel $diskSlot
+        :if ([:typeof [:find $diskSlot "sata"]] = "num") do={
+            :set diskLabel ("SATA: " . $diskSlot)
+        } else={
+            :if ([:typeof [:find $diskSlot "usb"]] = "num") do={
+                :set diskLabel ("USB: " . $diskSlot)
+            } else={
+                :if ([:typeof [:find $diskSlot "sd"]] = "num") do={
+                    :set diskLabel ("SD/microSD: " . $diskSlot)
+                } else={
+                    :if ([:typeof [:find $diskSlot "nvme"]] = "num") do={
+                        :set diskLabel ("NVMe: " . $diskSlot)
+                    } else={
+                        :set diskLabel ("Disk: " . $diskSlot)
+                    }
+                }
+            }
+        }
+        :put "  $diskCount. $diskLabel"
+        :set diskSlots ($diskSlots, $diskSlot)
     }
 }
 
-:if ($usbCount > 0) do={
-    :put "Found USB/SD storage:"
-    :local idx
-    :set idx 1
-    :foreach usb in=$usbDisks do={
-        :if ([:len $usb] > 0) do={
-            :put "  $idx. $usb"
-            :set idx ($idx + 1)
-        }
-    }
-    :put "  $idx. Internal storage (router)"
+:local internalOption
+:set internalOption ($diskCount + 1)
+:put "  $internalOption. Internal flash (ROM, not recommended)"
+
+:if ($diskCount > 0) do={
     :put ""
-    :put "Select installation location (1-$idx):"
+    :put "Select installation location (1-$internalOption) [Enter = 1]:"
     :local locationChoice
     :set locationChoice [$inputFunc]
+    :if ([:len $locationChoice] = 0) do={
+        :set locationChoice "1"
+    }
     :local locationIdx
     :set locationIdx [:tonum $locationChoice]
-    
-    :if ($locationIdx >= 1 && $locationIdx < $idx) do={
+
+    :if ($locationIdx >= 1 && $locationIdx <= $diskCount) do={
         :local selIdx
         :set selIdx 1
-        :foreach usb in=$usbDisks do={
-            :if ($selIdx = $locationIdx) do={
-                :set installLocation $usb
+        :foreach slot in=$diskSlots do={
+            :if ([:len $slot] > 0 && $selIdx = $locationIdx) do={
+                :set installLocation $slot
             }
             :set selIdx ($selIdx + 1)
         }
-        :put "Selected: $installLocation"
+        :put "Selected external storage: $installLocation"
     } else={
-        :set installLocation ""
-        :put "Selected: Internal storage"
+        :if ($locationIdx = $internalOption) do={
+            :set installLocation ""
+            :put "Selected: Internal flash"
+        } else={
+            :put "Invalid choice, using first disk."
+            :set installLocation ($diskSlots->0)
+        }
     }
 } else={
-    :put "No USB/SD storage found. Using internal storage."
+    :put ""
+    :put "No external disks found. Container will use internal flash."
+    :set installLocation ""
+}
+
+# ============================================================
+# STEP 2: Storage-dependent optimizations (RAM / pull cache)
+# ============================================================
+:put ""
+:put "=== Step 2: Storage optimizations ==="
+:put ""
+
+:local ramDiskSlot
+:set ramDiskSlot ""
+:local pullTmpdir
+:set pullTmpdir ""
+:local containerTmpfsSetting
+:set containerTmpfsSetting ""
+
+:if ([:len $installLocation] > 0) do={
+    :set pullTmpdir ($installLocation . "/pull")
+    :put "External storage: pull/extract cache -> $pullTmpdir"
+    :put "(Used only when downloading/updating image from Docker Hub)"
+    :put ""
+    :put "Mount /tmp inside container to RAM?"
+    :put "Usually NOT needed on external disk — logs and temp files go to disk."
+    :put "Enable container tmpfs /tmp? (y/n) [n]:"
+    :local enableTmpfs
+    :set enableTmpfs [$inputFunc]
+    :if ($enableTmpfs = "y" || $enableTmpfs = "Y" || $enableTmpfs = "yes") do={
+        :set containerTmpfsSetting "/tmp:32.0MiB:01777"
+        :put "Container /tmp will use RAM (32 MB)."
+    } else={
+        :put "Container /tmp will stay on root-dir disk."
+    }
+} else={
+    :put "Internal flash selected — RAM optimizations are recommended."
+    :put ""
+    :put "A) RAM disk for image pull cache (tmpdir) — avoids wear on flash during docker pull"
+    :put "B) RAM mount /tmp inside container — runtime logs and temp files stay off flash"
+    :put ""
+
+    :local disks
+    :set disks [/disk/print as-value where type="tmpfs"]
+    :if ([:len $disks] > 0) do={
+        :set ramDiskSlot (($disks->0)->"slot")
+        :put "OK: RAM disk already exists: $ramDiskSlot"
+    } else={
+        :put "Create RAM disk for pull cache? (recommended) (y/n) [y]:"
+        :local createRam
+        :set createRam [$inputFunc]
+        :if ([:len $createRam] = 0) do={
+            :set createRam "y"
+        }
+        :if ($createRam = "y" || $createRam = "Y" || $createRam = "yes") do={
+            :put "Enter RAM disk size in MB [Enter = 100]:"
+            :local ramSize
+            :set ramSize [$inputFunc]
+            :if ([:len $ramSize] = 0) do={
+                :set ramSize "100"
+            }
+            :put "Enter slot name [Enter = ramstorage]:"
+            :local slotName
+            :set slotName [$inputFunc]
+            :if ([:len $slotName] = 0) do={
+                :set slotName "ramstorage"
+            }
+            :local slotExists
+            :set slotExists [/disk/print as-value where slot=$slotName]
+            :if ([:len $slotExists] > 0) do={
+                :put "ERROR: Slot name '$slotName' already exists."
+            } else={
+                :local ramSizeMB
+                :set ramSizeMB ($ramSize . "M")
+                /disk/add slot=$slotName tmpfs-max-size=$ramSizeMB type=tmpfs
+                :put "Created RAM disk: $slotName ($ramSizeMB)"
+                :set ramDiskSlot $slotName
+            }
+        } else={
+            :put "Skipped RAM disk creation."
+        }
+    }
+
+    :put ""
+    :put "Mount /tmp inside container to RAM? (strongly recommended on internal flash) (y/n) [y]:"
+    :local enableTmpfsRom
+    :set enableTmpfsRom [$inputFunc]
+    :if ([:len $enableTmpfsRom] = 0 || $enableTmpfsRom = "y" || $enableTmpfsRom = "Y" || $enableTmpfsRom = "yes") do={
+        :set containerTmpfsSetting "/tmp:32.0MiB:01777"
+        :put "Container /tmp will use RAM (32 MB)."
+    } else={
+        :put "WARNING: /tmp will write to internal flash (root-dir)."
+    }
 }
 
 # ============================================================
@@ -198,6 +255,31 @@
 
 :if ($currentRegistry = $targetRegistry) do={
     :put "OK: Registry configured: $currentRegistry"
+    :if ([:len $pullTmpdir] > 0) do={
+        :if ($currentTmpdir != $pullTmpdir) do={
+            :put "Recommended pull tmpdir for external disk: $pullTmpdir"
+            :put "Set container config tmpdir? (y/n) [y]:"
+            :local setTmpdir
+            :set setTmpdir [$inputFunc]
+            :if ([:len $setTmpdir] = 0 || $setTmpdir = "y" || $setTmpdir = "Y" || $setTmpdir = "yes") do={
+                /container/config/set tmpdir=$pullTmpdir
+                :put "Tmpdir set to: $pullTmpdir"
+            }
+        } else={
+            :put "OK: Tmpdir already: $currentTmpdir"
+        }
+    } else={
+        :if ([:len $ramDiskSlot] > 0 && $currentTmpdir != ("/" . $ramDiskSlot)) do={
+            :put "Recommended pull tmpdir (RAM): /$ramDiskSlot"
+            :put "Set container config tmpdir? (y/n) [y]:"
+            :local setTmpdirRam
+            :set setTmpdirRam [$inputFunc]
+            :if ([:len $setTmpdirRam] = 0 || $setTmpdirRam = "y" || $setTmpdirRam = "Y" || $setTmpdirRam = "yes") do={
+                /container/config/set tmpdir=("/" . $ramDiskSlot)
+                :put "Tmpdir set to: /$ramDiskSlot"
+            }
+        }
+    }
 } else={
     :put "Current registry: $currentRegistry"
     :put "Recommended registry: $targetRegistry"
@@ -208,10 +290,14 @@
     
     :if ($updateReg = "y" || $updateReg = "Y" || $updateReg = "yes") do={
         :local tmpDir
-        :if ([:len $ramDiskSlot] > 0) do={
-            :set tmpDir ("/" . $ramDiskSlot)
+        :if ([:len $pullTmpdir] > 0) do={
+            :set tmpDir $pullTmpdir
         } else={
-            :set tmpDir $currentTmpdir
+            :if ([:len $ramDiskSlot] > 0) do={
+                :set tmpDir ("/" . $ramDiskSlot)
+            } else={
+                :set tmpDir $currentTmpdir
+            }
         }
         /container/config/set registry-url=$targetRegistry tmpdir=$tmpDir
         :put "Registry updated to: $targetRegistry"
@@ -1181,7 +1267,12 @@
     :put ""
     :put "Creating container from Docker Hub..."
     
-    /container/add hostname=$cHostname interface=$selectedVeth envlist=$selectedEnvList root-dir=$rootDir logging=yes start-on-boot=yes remote-image=simyrik/xray-mikrotik:latest
+    :if ([:len $containerTmpfsSetting] > 0) do={
+        /container/add hostname=$cHostname interface=$selectedVeth envlist=$selectedEnvList root-dir=$rootDir tmpfs=$containerTmpfsSetting logging=no start-on-boot=yes remote-image=simyrik/xray-mikrotik:latest
+        :put "Container /tmp mounted to RAM: $containerTmpfsSetting"
+    } else={
+        /container/add hostname=$cHostname interface=$selectedVeth envlist=$selectedEnvList root-dir=$rootDir logging=no start-on-boot=yes remote-image=simyrik/xray-mikrotik:latest
+    }
     
     :put "Container created. It will start downloading the image."
     :put "Check status with: /container/print"
@@ -1391,6 +1482,7 @@
 :put ""
 :put "Useful commands:"
 :put "  Check container: /container/print"
-:put "  Container logs: /container/shell 0"
+:put "  Enable container logging: /container/set [find interface=$selectedVeth] logging=yes"
+:put "  Shell inside container: /container/shell [find interface=$selectedVeth]"
 :put "  Add VPN targets: /ip/firewall/address-list/add list=to_vpn address=X.X.X.X"
 :put ""

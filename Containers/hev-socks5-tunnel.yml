@@ -1,0 +1,13 @@
+tunnel:
+  name: tun0
+  mtu: __HEV_MTU__
+
+socks5:
+  port: __SOCKS_PORT__
+  address: __SOCKS_ADDRESS__
+  udp: udp
+
+misc:
+  log-level: __HEV_LOG__
+  log-file: stderr
+  udp-read-write-timeout: 300000

@@ -7,6 +7,9 @@
 
 **Основные изменения в этом форке:**
 - ✨ **Единый multi-arch Dockerfile** — один Dockerfile для всех архитектур (ARM, ARM64, AMD64)
+- 📦 **Slim-образ** — multi-stage сборка, без p7zip/bash/openrc
+- 🔀 **hev-socks5-tunnel** вместо tun2socks — корректный UDP (Discord voice, WebRTC)
+- ⬆️ **Актуальный Xray-core** — скачивается при сборке с GitHub; fallback — локальный `.7z` в `xray-core/`
 - 🔗 **Поддержка FULL_STRING** — использование полной строки подключения из 3x-ui
 - 📡 **Поддержка SUBSCRIPTION_URL** — автоматическое получение конфигурации из подписки
 - 🔄 **Автоматическое обновление подписки** — периодическое обновление через cron
@@ -284,7 +287,7 @@ add key=CONTAINER_BRIDGE_IP list=xvr value=172.18.20.5
 Используйте образ из [Docker Hub репозитория](https://hub.docker.com/r/simyrik/xray-mikrotik):
 
 ```
-/container add hostname=xray-vless interface=docker-xray-vless-veth envlist=xvr root-dir=xray-vless logging=yes start-on-boot=yes remote-image=simyrik/xray-mikrotik:latest
+/container add hostname=xray-vless interface=docker-xray-vless-veth envlist=xvr root-dir=xray-vless logging=no start-on-boot=yes remote-image=simyrik/xray-mikrotik:latest
 ```
 
 Docker автоматически выберет правильный образ для архитектуры вашего устройства.
@@ -322,6 +325,15 @@ docker buildx inspect --bootstrap
 ```
 
 **Сборка образа:**
+
+При сборке автоматически скачиваются:
+- [Xray-core](https://github.com/XTLS/Xray-core) — `releases/latest`
+- [hev-socks5-tunnel](https://github.com/heiher/hev-socks5-tunnel) — последний релиз
+
+Если GitHub недоступен, используются локальные архивы :
+
+- `xray-core/Xray-linux-{amd64,arm64,arm}.7z`
+- `hev/hev-socks5-tunnel-linux-{amd64,arm64,arm}.7z`
 
 Для всех архитектур используется единый `Dockerfile` с параметром `--platform`:
 
@@ -366,7 +378,7 @@ docker buildx build -f Dockerfile \
 
 Затем в RouterOS:
 ```
-/container add hostname=xray-vless interface=docker-xray-vless-veth envlist=xvr root-dir=xray-vless logging=yes start-on-boot=yes remote-image=user/xray-mikrotik:latest
+/container add hostname=xray-vless interface=docker-xray-vless-veth envlist=xvr root-dir=xray-vless logging=no start-on-boot=yes remote-image=user/xray-mikrotik:latest
 ```
 
 2. **Через файл:** Экспортируйте образ в файл и загрузите его в RouterOS через контейнеры.
@@ -398,5 +410,5 @@ add chain=input in-interface=docker-xray-vless-veth src-address=172.18.20.6 dst-
 8) Запускаем контейнер через WinBox в разделе меню Winbox "container". В логах MikroTik вы увидите характерные сообщения о запуске контейнера. 
 
 :fire::fire::fire: Поздравляю! Настройка завершена. Можно проверить доступность IP 172.217.168.206 из списка "to_vpn" (этот адрес мы добавили ранее). Проверям доступность через запрос на https порт (запрос в браузере, telnet или TNC PowerShell)
- 
-По желанию логирование контейнера можно отключить что бы не засорялся лог RouteOS.
+
+Логирование контейнера в RouterOS **выключено по умолчанию** (`logging=no`), чтобы не засорять `/log`.

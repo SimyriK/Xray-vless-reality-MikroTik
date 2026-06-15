@@ -34,6 +34,15 @@ XHTTP_PATH=$(echo "$FULL_STRING" | sed "s/^.*path=//g" | sed "s/&.*$//g" | sed "
 if [ -z "$XHTTP_PATH" ] || echo "$XHTTP_PATH" | grep -q "^vless://"; then
   XHTTP_PATH="/"
 fi
+XHTTP_MODE=$(echo "$FULL_STRING" | sed "s/^.*mode=//g" | sed "s/&.*$//g")
+if [ -z "$XHTTP_MODE" ] || echo "$XHTTP_MODE" | grep -q "^vless://"; then
+  XHTTP_MODE="auto"
+fi
+SPIDERX=$(echo "$FULL_STRING" | sed "s/^.*spx=//g" | sed "s/&.*$//g" | sed "s/%2F/\//g")
+if [ -z "$SPIDERX" ] || echo "$SPIDERX" | grep -q "^vless://"; then
+  SPIDERX="/"
+fi
+SOCKS_LISTEN_ADDR="${SOCKS_LISTEN:-0.0.0.0}"
 
 echo "XHTTP config:"
 echo "NETWORK: $NETWORK"
@@ -46,6 +55,9 @@ echo "SERVER_NAME_SNI: $SERVER_NAME_SNI"
 echo "PUBLIC_KEY_PBK: $PUBLIC_KEY_PBK"
 echo "SHORT_ID_SID: $SHORT_ID_SID"
 echo "XHTTP_PATH: $XHTTP_PATH"
+echo "XHTTP_MODE: $XHTTP_MODE"
+echo "SPIDERX: $SPIDERX"
+echo "SOCKS_LISTEN: $SOCKS_LISTEN_ADDR"
 
 cat <<EOF > /opt/xray/config/config.json
 {
@@ -54,14 +66,15 @@ cat <<EOF > /opt/xray/config/config.json
   },
   "inbounds": [
     {
+      "tag": "socks-in",
       "port": 10800,
-      "listen": "0.0.0.0",
+      "listen": "$SOCKS_LISTEN_ADDR",
       "protocol": "socks",
       "settings": {
         "udp": true
       },
       "sniffing": {
-        "enabled": false,
+        "enabled": true,
         "destOverride": ["http", "tls", "quic"],
         "routeOnly": true
       }
@@ -87,18 +100,24 @@ cat <<EOF > /opt/xray/config/config.json
       "streamSettings": {
         "network": "$NETWORK",
         "xhttpSettings": {
-          "path": "$XHTTP_PATH"
+          "path": "$XHTTP_PATH",
+          "mode": "$XHTTP_MODE"
         },
         "security": "reality",
         "realitySettings": {
           "fingerprint": "$FINGERPRINT_FP",
           "serverName": "$SERVER_NAME_SNI",
           "publicKey": "$PUBLIC_KEY_PBK",
-          "shortId": "$SHORT_ID_SID"
+          "shortId": "$SHORT_ID_SID",
+          "spx": "$SPIDERX"
         }
       },
       "tag": "proxy"
     }
-  ]
+  ],
+  "routing": {
+    "domainStrategy": "AsIs",
+    "rules": []
+  }
 }
 EOF
